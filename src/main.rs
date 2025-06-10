@@ -1,16 +1,17 @@
 use clap::Parser;
 use dtar::cli::{Args, Commands};
+use dtar::error::DtarError;
 use dtar::map::{DedupMap, FileInfo, FileMap};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::io;
 use std::io::{Read, Write};
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use tar::{Builder, EntryType, Header};
 use walkdir::WalkDir;
-use dtar::error::DtarError;
 
 type Result<T> = anyhow::Result<T>;
 
@@ -20,13 +21,21 @@ fn main() -> Result<()> {
         Commands::Create {
             archive,
             directories,
-        } => create_archive(archive, directories),
+            create_dedup_map,
+            verbose,
+            follow_symlinks,
+        } => create_archive(archive, directories, create_dedup_map, verbose),
     };
 
     Ok(result?)
 }
 
-fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
+fn create_archive(
+    archive: String,
+    directories: Vec<String>,
+    create_dedup_map: bool,
+    verbose: bool,
+) -> Result<()> {
     let dir = directories
         .first()
         .ok_or_else(|| DtarError::NoDirectories)?;
@@ -67,25 +76,42 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
         // Duplicates -- write the first file as a file, create hard links for the rest
         if files.len() > 1 {
             let primary = &files[0];
-            builder.append_path_with_name(&primary.path, &primary.sanitize_path())?;
-            dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
+            builder.append_path_with_name(&primary.path_as_string(), &primary.sanitize_path())?;
+            if create_dedup_map {
+                dedup_map.add_file(&hash, PathBuf::from(&files[0].path_as_string()));
+            }
 
             for dup in &files[1..] {
                 let mut header = Header::new_gnu();
+                header.set_uid(<u64>::from(dup.direntry.metadata()?.uid()));
+                header.set_gid(<u64>::from(dup.direntry.metadata()?.gid()));
                 header.set_entry_type(EntryType::Link);
                 header.set_size(0);
 
-                builder.append_link(&mut header, &dup.sanitize_path(), &primary.path)?;
-                dedup_map.add_file(&hash, PathBuf::from(&dup.path));
+                builder.append_link(
+                    &mut header,
+                    &dup.sanitize_path(),
+                    &primary.path_as_string(),
+                )?;
+                if create_dedup_map {
+                    dedup_map.add_file(&hash, PathBuf::from(&dup.path_as_string()));
+                }
             }
         } else {
-            // dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
-            builder.append_path_with_name(&files[0].path, &files[0].sanitize_path())?;
+            builder.append_path_with_name(&files[0].path_as_string(), &files[0].sanitize_path())?;
         }
     }
 
     builder.finish()?;
-    dedup_map.save("foobar.json")?;
+
+    if create_dedup_map {
+        if let Some(dedup_map_path) = generate_dedup_map_path(&archive) {
+            dedup_map.save(&dedup_map_path)?;
+            eprintln!("Deduplication map saved to: {}", dedup_map_path);
+        } else {
+            eprintln!("Warning: Cannot create deduplication map when writing to stdout");
+        }
+    }
 
     Ok(())
 }
@@ -107,24 +133,19 @@ fn collect_files(dir: &str) -> Result<Vec<FileInfo>> {
     let mut result: Vec<FileInfo> = Vec::new();
 
     for f in WalkDir::new(dir) {
-        let entry = f?;
-        let path = entry
-            .path()
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
+        let entry = match f {
+            Ok(entry) => entry,
+            Err(err) => anyhow::bail!("Error walking directory: {}", err),
+        };
 
-        result.push(FileInfo {
-            path: path.to_string(),
-            hash: vec![],
-            size: entry.metadata()?.len(),
-        });
+        result.push(FileInfo::new(entry)?);
     }
 
     Ok(result)
 }
 
 fn calc_file_hash(file_info: &FileInfo) -> Result<FileInfo> {
-    let mut file = File::open(&file_info.path)?;
+    let mut file = File::open(&file_info.path_as_string())?;
     let mut hasher = Sha256::new();
     const BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
     let mut buffer = [0; BUFFER_SIZE];
@@ -137,9 +158,24 @@ fn calc_file_hash(file_info: &FileInfo) -> Result<FileInfo> {
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(FileInfo {
-        path: file_info.path.clone(),
-        hash: hasher.finalize().to_vec(),
-        size: file_info.size,
-    })
+    let mut file_info_with_hash = file_info.clone();
+    file_info_with_hash.set_hash(hasher.finalize().to_vec());
+    Ok(file_info_with_hash)
+}
+
+/// Generates the path for the dedup-map based on the archive name and path.
+///
+/// Replaces .tar by .ddm (de-dup-map)
+/// Adds .ddm if no extension is present in the archive name
+/// Returns None if archive is stdout ("-")
+fn generate_dedup_map_path(archive: &str) -> Option<String> {
+    if archive == "-" {
+        return None;
+    }
+
+    if archive.ends_with(".tar") {
+        Some(archive.replace(".tar", ".ddm"))
+    } else {
+        Some(format!("{}.ddm", archive))
+    }
 }

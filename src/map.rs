@@ -3,24 +3,43 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
+use walkdir::DirEntry;
 
 pub type FileMap = HashMap<String, Vec<FileInfo>>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct FileInfo {
-    pub path: String,
+    pub direntry: DirEntry,
+    // pub path: String,
     pub hash: Vec<u8>,
     pub size: u64,
 }
 
 impl FileInfo {
+    pub fn new(direntry: DirEntry) -> Result<Self, std::io::Error> {
+        let size = direntry.metadata()?.len();
+        Ok(Self {
+            direntry,
+            hash: vec![],
+            size,
+        })
+    }
+
+    pub fn set_hash(&mut self, hash: Vec<u8>) {
+        self.hash = hash;
+    }
+
     pub fn hash_to_hex(&self) -> String {
         self.hash.iter().map(|b| format!("{:02x}", b)).collect()
     }
 
+    pub fn path_as_string(&self) -> String {
+        self.direntry.path().to_str().unwrap().to_string()
+    }
+
     // On absolute paths we need to remove the leading slash to get a relative path
     pub fn sanitize_path(&self) -> String {
-        self.path.trim_start_matches('/').to_string()
+        self.path_as_string().trim_start_matches('/').to_string()
     }
 }
 
