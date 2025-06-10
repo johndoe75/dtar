@@ -13,4 +13,9 @@ impl FileInfo {
     pub fn hash_to_hex(&self) -> String {
         self.hash.iter().map(|b| format!("{:02x}", b)).collect()
     }
+
+    // On absolute paths we need to remove the leading slash to get a relative path
+    pub fn sanitize_path(&self) -> String {
+        self.path.trim_start_matches('/').to_string()
+    }
 }

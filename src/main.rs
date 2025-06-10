@@ -2,7 +2,7 @@ use clap::Parser;
 use dtar::cli::{Args, Commands};
 use dtar::map::{FileInfo, FileMap};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use sha2::{Digest, Sha224, Sha256};
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
 use tar::Builder;
@@ -45,39 +45,24 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
     let tar_file = File::create(archive)?;
     let mut builder = Builder::new(tar_file);
 
-    for (hash, files) in map {
-        for file in files {
-            println!("{} {} {}", hash, file.path, file.size);
-        }
+    for (_, files) in map {
+        eprintln!("a {}", files[0].sanitize_path());
 
         // Duplicates
-        // if files.len() > 1 {
-        //     println!("Duplicate: {} {}", hash, files[0].path);
-        // }
+        if files.len() > 1 {
+            let primary = &files[0];
+            builder.append_path_with_name(&primary.path, &primary.sanitize_path())?;
+            for dup in &files[1..] {
+                let mut header = tar::Header::new_gnu();
+                builder.append_link(&mut header, &dup.sanitize_path(), &primary.sanitize_path())?
+            }
+        } else {
+            builder.append_path_with_name(&files[0].path, &files[0].sanitize_path())?;
+        }
     }
 
-    // for f in WalkDir::new(dir) {
-    //     let entry = f?;
-    //     let path = entry
-    //         .path()
-    //         .to_str()
-    //         .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
-    //
-    //     let hash = Sha256::digest(path.as_bytes());
-    //
-    //     let file_info = FileInfo {
-    //         path: path.to_string(),
-    //         hash: hash.to_vec(),
-    //         size: entry.metadata()?.len(),
-    //     };
-    //
-    //     map.entry(file_info.hash_to_hex())
-    //         .or_insert_with(Vec::new)
-    //         .push(file_info);
-    // }
-    //
-    // println!("{:#?}", map);
-    //
+    builder.finish()?;
+
     Ok(())
 }
 
