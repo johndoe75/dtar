@@ -1,10 +1,12 @@
 use clap::Parser;
 use dtar::cli::{Args, Commands};
-use dtar::map::{FileInfo, FileMap};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use dtar::map::{DedupMap, FileInfo, FileMap};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 use tar::Builder;
 use walkdir::WalkDir;
 
@@ -27,41 +29,57 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
         .first()
         .ok_or_else(|| anyhow::anyhow!("No directories provided"))?;
 
+    eprintln!("Collecting files from {}", dir);
     let all_files = collect_files(dir)?;
 
-    // Eat this in parallel
-    let all_files = all_files
+    // Parallelize the hash map generation:
+    // - map: calculate the hash for each file
+    // - fold: each thread generates its own local hash map for a chunk of files
+    // - reduce: combines all thread-local hash maps into one final map
+    eprintln!("Generating hashes for deduplication");
+    let map = all_files
         .par_iter()
         .map(calc_file_hash)
         .flatten()
-        .collect::<Vec<FileInfo>>();
+        .fold(HashMap::new, |mut acc: FileMap, file| {
+            acc.entry((file.hash_to_hex())).or_default().push(file);
+            acc
+        })
+        .reduce(HashMap::new, |mut map1, mut map2| {
+            for (hash, mut files) in map2 {
+                map1.entry(hash).or_default().append(&mut files);
+            }
+            map1
+        });
 
-    let mut map = FileMap::new();
-
-    for file in all_files {
-        map.entry(file.hash_to_hex()).or_default().push(file);
-    }
-
+    eprintln!("Writing the archive to {}", archive);
     let tar_file = File::create(archive)?;
     let mut builder = Builder::new(tar_file);
+    let mut dedup_map = DedupMap::new();
 
-    for (_, files) in map {
+    // We cannot parallelize the tar writing! This needs to be done sequentially.
+    for (hash, files) in map {
         eprintln!("a {}", files[0].sanitize_path());
 
-        // Duplicates
+        // Duplicates -- write the first file as a file, create hard links for the rest
         if files.len() > 1 {
             let primary = &files[0];
             builder.append_path_with_name(&primary.path, &primary.sanitize_path())?;
+            dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
+
             for dup in &files[1..] {
                 let mut header = tar::Header::new_gnu();
-                builder.append_link(&mut header, &dup.sanitize_path(), &primary.sanitize_path())?
+                builder.append_link(&mut header, &dup.sanitize_path(), &primary.sanitize_path())?;
+                dedup_map.add_file(&hash, PathBuf::from(&dup.path));
             }
         } else {
+            dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
             builder.append_path_with_name(&files[0].path, &files[0].sanitize_path())?;
         }
     }
 
     builder.finish()?;
+    dedup_map.save("foobar.json")?;
 
     Ok(())
 }
