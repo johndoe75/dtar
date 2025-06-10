@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 pub type FileMap = HashMap<String, Vec<FileInfo>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileInfo {
     pub path: String,
     pub hash: Vec<u8>,

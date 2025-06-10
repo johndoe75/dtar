@@ -10,6 +10,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use tar::{Builder, EntryType, Header};
 use walkdir::WalkDir;
+use dtar::error::DtarError;
 
 type Result<T> = anyhow::Result<T>;
 
@@ -28,7 +29,7 @@ fn main() -> Result<()> {
 fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
     let dir = directories
         .first()
-        .ok_or_else(|| anyhow::anyhow!("No directories provided"))?;
+        .ok_or_else(|| DtarError::NoDirectories)?;
 
     eprintln!("Collecting files from {}", dir);
     let all_files = collect_files(dir)?;
@@ -125,7 +126,8 @@ fn collect_files(dir: &str) -> Result<Vec<FileInfo>> {
 fn calc_file_hash(file_info: &FileInfo) -> Result<FileInfo> {
     let mut file = File::open(&file_info.path)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0; 1024 * 1024]; // 1 MB buffer
+    const BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
+    let mut buffer = [0; BUFFER_SIZE];
 
     loop {
         let bytes_read = file.read(&mut buffer)?;
