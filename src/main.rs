@@ -102,13 +102,21 @@ fn collect_files(dir: &str) -> Result<Vec<FileInfo>> {
 }
 
 fn calc_file_hash(file_info: &FileInfo) -> Result<FileInfo> {
-    let mut file = File::open(file_info.path.clone()).unwrap();
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
+    let mut file = File::open(&file_info.path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 1024 * 1024]; // 1 MB buffer
+
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
 
     Ok(FileInfo {
         path: file_info.path.clone(),
-        hash: Sha256::digest(buffer.as_slice()).to_vec(),
+        hash: hasher.finalize().to_vec(),
         size: file_info.size,
     })
 }
