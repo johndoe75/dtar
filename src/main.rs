@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use tar::Builder;
+use tar::{Builder, EntryType, Header};
 use walkdir::WalkDir;
 
 type Result<T> = anyhow::Result<T>;
@@ -42,10 +42,10 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
         .map(calc_file_hash)
         .flatten()
         .fold(HashMap::new, |mut acc: FileMap, file| {
-            acc.entry((file.hash_to_hex())).or_default().push(file);
+            acc.entry(file.hash_to_hex()).or_default().push(file);
             acc
         })
-        .reduce(HashMap::new, |mut map1, mut map2| {
+        .reduce(HashMap::new, |mut map1, map2| {
             for (hash, mut files) in map2 {
                 map1.entry(hash).or_default().append(&mut files);
             }
@@ -68,12 +68,15 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
             dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
 
             for dup in &files[1..] {
-                let mut header = tar::Header::new_gnu();
-                builder.append_link(&mut header, &dup.sanitize_path(), &primary.sanitize_path())?;
+                let mut header = Header::new_gnu();
+                header.set_entry_type(EntryType::Link);
+                header.set_size(0);
+
+                builder.append_link(&mut header, &dup.sanitize_path(), &primary.path)?;
                 dedup_map.add_file(&hash, PathBuf::from(&dup.path));
             }
         } else {
-            dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
+            // dedup_map.add_file(&hash, PathBuf::from(&files[0].path));
             builder.append_path_with_name(&files[0].path, &files[0].sanitize_path())?;
         }
     }
