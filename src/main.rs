@@ -5,7 +5,8 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
+use std::io;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use tar::{Builder, EntryType, Header};
 use walkdir::WalkDir;
@@ -53,8 +54,9 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
         });
 
     eprintln!("Writing the archive to {}", archive);
-    let tar_file = File::create(archive)?;
-    let mut builder = Builder::new(tar_file);
+
+    let writer = create_tar_writer(&archive)?;
+    let mut builder = Builder::new(writer);
     let mut dedup_map = DedupMap::new();
 
     // We cannot parallelize the tar writing! This needs to be done sequentially.
@@ -85,6 +87,19 @@ fn create_archive(archive: String, directories: Vec<String>) -> Result<()> {
     dedup_map.save("foobar.json")?;
 
     Ok(())
+}
+
+/// If the archive path is "-", we write the archive to stdout -- like the GNU tar would.
+/// This allows the user to further handle the tar before it hits the drive.  Something like
+/// compressing the archive like this:
+///
+/// dtar - {directory} | gzip > output.tgz
+fn create_tar_writer(path: &str) -> Result<Box<dyn Write>> {
+    if path == "-" {
+        Ok(Box::new(io::stdout()))
+    } else {
+        Ok(Box::new(File::create(path)?))
+    }
 }
 
 fn collect_files(dir: &str) -> Result<Vec<FileInfo>> {
