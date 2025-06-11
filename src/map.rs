@@ -9,7 +9,7 @@ pub type FileMap = HashMap<String, Vec<FileInfo>>;
 
 #[derive(Debug, Clone)]
 pub struct FileInfo {
-    pub direntry: DirEntry,
+    pub dir_entry: DirEntry,
     // pub path: String,
     pub hash: Vec<u8>,
     pub size: u64,
@@ -19,7 +19,7 @@ impl FileInfo {
     pub fn new(direntry: DirEntry) -> Result<Self, std::io::Error> {
         let size = direntry.metadata()?.len();
         Ok(Self {
-            direntry,
+            dir_entry: direntry,
             hash: vec![],
             size,
         })
@@ -34,7 +34,7 @@ impl FileInfo {
     }
 
     pub fn path_as_string(&self) -> String {
-        self.direntry.path().to_str().unwrap().to_string()
+        self.dir_entry.path().to_str().unwrap().to_string()
     }
 
     // On absolute paths we need to remove the leading slash to get a relative path
@@ -81,5 +81,40 @@ impl DedupMap {
         let writer = BufWriter::new(file);
         serde_json::to_writer_pretty(writer, self)?;
         Ok(())
+    }
+}
+
+pub struct Archive {
+    pub orig_size: u64,
+    pub dedup_size: u64,
+}
+
+impl Archive {
+    pub fn new() -> Self {
+        Self {
+            orig_size: 0,
+            dedup_size: 0,
+        }
+    }
+
+    pub fn add_file(&mut self, file: &FileInfo) {
+        self.orig_size += file.size;
+        self.dedup_size += file.size;
+    }
+
+    pub fn add_dup(&mut self, file: &FileInfo) {
+        self.orig_size += file.size;
+    }
+    
+    pub fn get_orig_size(&self) -> u64 {
+        self.orig_size
+    }
+    
+    pub fn get_dedup_size(&self) -> u64 {
+        self.dedup_size
+    }
+    
+    pub fn get_dedup_ratio(&self) -> f64 {
+        self.dedup_size as f64 / self.orig_size as f64
     }
 }

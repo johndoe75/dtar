@@ -1,11 +1,12 @@
 use clap::Parser;
 use dtar::cli::{Args, Commands};
 use dtar::error::DtarError;
-use dtar::map::{DedupMap, FileInfo, FileMap};
+use dtar::map::{Archive, DedupMap, FileInfo, FileMap};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
+use size::Size;
 use std::collections::HashMap;
-use std::fs::{File, Metadata};
+use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
@@ -23,7 +24,7 @@ fn main() -> Result<()> {
             directories,
             create_dedup_map,
             verbose,
-            follow_symlinks,
+            follow_symlinks: _,
         } => create_archive(archive, directories, create_dedup_map, verbose),
     };
 
@@ -34,7 +35,7 @@ fn create_archive(
     archive: String,
     directories: Vec<String>,
     create_dedup_map: bool,
-    verbose: bool,
+    _verbose: bool,
 ) -> Result<()> {
     let dir = directories
         .first()
@@ -68,23 +69,27 @@ fn create_archive(
     let writer = create_tar_writer(&archive)?;
     let mut builder = Builder::new(writer);
     let mut dedup_map = DedupMap::new();
+    let mut archive_data = Archive::new();
 
     // We cannot parallelize the tar writing! This needs to be done sequentially.
     for (hash, files) in map {
-        eprintln!("a {}", files[0].sanitize_path());
-
         // Duplicates -- write the first file as a file, create hard links for the rest
         if files.len() > 1 {
             let primary = &files[0];
+            eprintln!("a {}", files[0].sanitize_path());
             builder.append_path_with_name(&primary.path_as_string(), &primary.sanitize_path())?;
+            archive_data.add_file(&primary);
+
             if create_dedup_map {
                 dedup_map.add_file(&hash, PathBuf::from(&files[0].path_as_string()));
             }
 
             for dup in &files[1..] {
+                eprintln!("h {}", dup.sanitize_path());
+
                 let mut header = Header::new_gnu();
-                header.set_uid(<u64>::from(dup.direntry.metadata()?.uid()));
-                header.set_gid(<u64>::from(dup.direntry.metadata()?.gid()));
+                header.set_uid(<u64>::from(dup.dir_entry.metadata()?.uid()));
+                header.set_gid(<u64>::from(dup.dir_entry.metadata()?.gid()));
                 header.set_entry_type(EntryType::Link);
                 header.set_size(0);
 
@@ -93,12 +98,16 @@ fn create_archive(
                     &dup.sanitize_path(),
                     &primary.path_as_string(),
                 )?;
+                archive_data.add_dup(&dup);
+
                 if create_dedup_map {
                     dedup_map.add_file(&hash, PathBuf::from(&dup.path_as_string()));
                 }
             }
         } else {
+            eprintln!("a {}", files[0].sanitize_path());
             builder.append_path_with_name(&files[0].path_as_string(), &files[0].sanitize_path())?;
+            archive_data.add_file(&files[0]);
         }
     }
 
@@ -112,6 +121,13 @@ fn create_archive(
             eprintln!("Warning: Cannot create deduplication map when writing to stdout");
         }
     }
+
+    eprintln!(
+        "\nArchive orig size: {}, dedup size: {}, saved: {:.2} %",
+        Size::from_bytes(archive_data.orig_size),
+        Size::from_bytes(archive_data.dedup_size),
+        ((1.0 - archive_data.get_dedup_ratio()) * 100.0)
+    );
 
     Ok(())
 }
