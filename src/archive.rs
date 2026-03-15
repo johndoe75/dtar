@@ -1,7 +1,6 @@
-use crate::error::DtarError;
 use crate::map::{Archive, DedupMap, FileInfo, FileMap};
-use crate::{hasher, walker};
 use crate::Result;
+use crate::{hasher, walker};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use size::Size;
 use std::collections::HashMap;
@@ -93,7 +92,10 @@ pub fn create_archive(
             map1
         });
 
-    eprintln!("Writing the archive to {}", archive);
+    match archive.as_str() {
+        "-" => eprintln!("Sending archive to stdout"),
+        _ => eprintln!("Writing the archive to {}", archive),
+    }
 
     let writer = create_tar_writer(&archive)?;
     let mut builder = Builder::new(writer);
@@ -129,11 +131,7 @@ pub fn create_archive(
                 header.set_entry_type(EntryType::Link);
                 header.set_size(0);
 
-                builder.append_link(
-                    &mut header,
-                    &dup_sanitized_path,
-                    &primary.path_as_string(),
-                )?;
+                builder.append_link(&mut header, &dup_sanitized_path, &primary.path_as_string())?;
                 archive_data.add_dup(&dup);
 
                 if create_dedup_map {
