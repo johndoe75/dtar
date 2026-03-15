@@ -21,3 +21,6 @@ target/
 .idea/
 
 /target
+
+# Ignore tar files
+*.tar

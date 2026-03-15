@@ -41,6 +41,11 @@ impl FileInfo {
     pub fn sanitize_path(&self) -> String {
         self.path_as_string().trim_start_matches('/').to_string()
     }
+
+    // Check if this is an empty file (0 bytes)
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

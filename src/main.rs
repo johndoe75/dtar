@@ -54,7 +54,13 @@ fn create_archive(
         .map(calc_file_hash)
         .flatten()
         .fold(HashMap::new, |mut acc: FileMap, file| {
-            acc.entry(file.hash_to_hex()).or_default().push(file);
+            let key = if file.is_empty() {
+                format!("empty: {}", file.path_as_string())
+            } else {
+                file.hash_to_hex()
+            };
+
+            acc.entry(key).or_default().push(file);
             acc
         })
         .reduce(HashMap::new, |mut map1, map2| {
