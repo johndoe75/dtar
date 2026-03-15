@@ -13,7 +13,7 @@ pub struct Args {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    /// Create a new archive.  Required is the archive name and at least one directory or file.
+    /// Create a new archive
     Create {
         #[arg(
             short,
@@ -22,9 +22,6 @@ pub enum Commands {
             help = "Create a deduplication map"
         )]
         create_dedup_map: bool,
-
-        #[arg(short, long, default_value = "false", help = "Increase verbosity")]
-        verbose: bool,
 
         #[arg(
             short,
@@ -39,5 +36,20 @@ pub enum Commands {
 
         #[clap(value_delimiter = ' ', num_args = 1.., required = true)]
         directories: Vec<String>,
+
+        #[arg(short, long, default_value = "false", help = "Increase verbosity")]
+        verbose: bool,
     },
+
+    /// Extract an archive.
+    Extract {
+        #[arg(short, long, default_value = ".", help = "Extract to a specific directory")]
+        extract_to: String,
+
+        #[arg(short, long, default_value = "false", help = "Increase verbosity")]
+        verbose: bool,
+
+        #[clap(num_args = 1, required = true)]
+        archive: String,
+    }
 }

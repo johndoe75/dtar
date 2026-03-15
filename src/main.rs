@@ -14,6 +14,12 @@ fn main() -> Result<()> {
             verbose,
             follow_symlinks: _,
         } => archive::create_archive(archive, directories, create_dedup_map, verbose),
+
+        Commands::Extract {
+            verbose,
+            extract_to,
+            archive,
+        } => archive::extract_archive(extract_to, archive, verbose),
     };
 
     Ok(result?)

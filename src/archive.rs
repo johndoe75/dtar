@@ -1,15 +1,19 @@
 use crate::map::{Archive, DedupMap, FileInfo, FileMap};
 use crate::Result;
 use crate::{hasher, walker};
+use anyhow::{anyhow, bail, Context};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use size::Size;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
-use std::io::Write;
+use std::io::{Read, Seek, Write};
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tar::{Builder, EntryType, Header};
+
+const ARCHIVE_FILE_EXTENSION: &str = "ddm";
+const ARCHIVE_FILE_NAME: &str = "archive";
 
 /// Creates a deduplicated archive file using the specified directories.
 ///
@@ -113,7 +117,7 @@ pub fn create_archive(
             }
             builder.append_path_with_name(&primary.path_as_string(), &sanitized_path)?;
             archive_data.add_file(&primary);
-            dedup_map.add_file(&hash, PathBuf::from(&files[0].path_as_string()));
+            dedup_map.add_file(&hash, PathBuf::from(&sanitized_path));
 
             for dup in &files[1..] {
                 let dup_sanitized_path = dup.sanitize_path();
@@ -128,9 +132,9 @@ pub fn create_archive(
                 header.set_entry_type(EntryType::Link);
                 header.set_size(0);
 
-                builder.append_link(&mut header, &dup_sanitized_path, &primary.path_as_string())?;
+                builder.append_link(&mut header, &dup_sanitized_path, &sanitized_path)?;
                 archive_data.add_dup(&dup);
-                dedup_map.add_file(&hash, PathBuf::from(&dup.path_as_string()));
+                dedup_map.add_file(&hash, PathBuf::from(&dup_sanitized_path));
             }
         } else {
             let sanitized_path = files[0].sanitize_path();
@@ -145,9 +149,9 @@ pub fn create_archive(
     }
 
     // In every case, we add the deduplication map to the archive to keep it as portable as possible.
-    let default_name = "archive.ddm";
+    let default_name = format!("{}.{}", ARCHIVE_FILE_NAME, ARCHIVE_FILE_EXTENSION);
     let dedup_map_filename =
-        generate_dedup_map_path(&archive).unwrap_or_else(|| String::from(default_name));
+        generate_dedup_map_path(&archive).unwrap_or_else(|| default_name.clone());
     dedup_map.save(&dedup_map_filename)?;
     builder.append_path_with_name(&dedup_map_filename, default_name)?;
     builder.finish()?;
@@ -166,6 +170,60 @@ pub fn create_archive(
     );
 
     Ok(())
+}
+
+pub fn extract_archive(extract_to: String, archive: String, verbose: bool) -> Result<()> {
+    let file = File::open(archive)?;
+    let mut tar = tar::Archive::new(file);
+
+    eprintln!("Extracting archive to {}", extract_to);
+
+    tar.set_preserve_permissions(true);
+    tar.set_preserve_ownerships(true);
+    tar.set_preserve_mtime(true);
+    tar.unpack(extract_to)?;
+
+    Ok(())
+}
+
+pub fn verify_archive(archive: String) -> Result<()> {
+    let file = File::open(archive)?;
+    let mut tar = tar::Archive::new(file);
+    let file = tar.into_inner();
+
+    Ok(())
+}
+
+fn read_dedup_map_from_archive_end(file: &mut File) -> Result<DedupMap> {
+    file.rewind()?;
+    let mut tar = tar::Archive::new(file);
+    let map_name = format!("{}.{}", ARCHIVE_FILE_NAME, ARCHIVE_FILE_EXTENSION);
+
+    let mut last_path: Option<PathBuf> = None;
+    let mut last_conents: Option<Vec<u8>> = None;
+
+    for entry_result in tar.entries()? {
+        let mut entry = entry_result?;
+        let path = entry.path()?.into_owned();
+        last_path = Some(path);
+        let mut contents = Vec::new();
+        entry.read_to_end(&mut contents)?;
+        last_conents = Some(contents);
+    }
+
+    let last_path = last_path.ok_or_else(|| anyhow!("Archive is empty"))?;
+    if last_path != Path::new(&map_name) {
+        bail!(
+            "dedup map not found at the end of the archive. Last entry was: {}",
+            last_path.display()
+        );
+    }
+
+    let contents = last_conents.ok_or_else(|| anyhow!("archive.ddm was empty"))?;
+    let dedup_map: DedupMap =
+        serde_json::from_slice(&contents).context("Failed to parse dedup map")?;
+
+    Ok(dedup_map)
 }
 
 /// If the archive path is "-", we write the archive to stdout -- like the GNU tar would.
