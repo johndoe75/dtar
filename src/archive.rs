@@ -12,6 +12,55 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use tar::{Builder, EntryType, Header};
 
+/// Creates a deduplicated archive file using the specified directories.
+///
+/// # Arguments
+///
+/// - `archive` (`String`): The name of the resulting archive file.
+/// - `directories` (`Vec<String>`): A list of directories to collect files from for archiving.
+///   Only the first directory in the list is currently used.
+/// - `create_dedup_map` (`bool`): If `true`, generates a deduplication map alongside the archive.
+/// - `_verbose` (`bool`): Currently unused. Reserved for future verbose output capability.
+///
+/// # Returns
+///
+/// - `Result<()>`: Returns `Ok(())` if the archive is created successfully,
+///   or an error if the process fails at any stage.
+///
+/// # Errors
+///
+/// - Returns an error if no directories are specified in the `directories` parameter.
+/// - Returns an error if files cannot be collected from the specified directory.
+/// - Returns an error if the hash map generation or tar-writing process fails.
+/// - Returns an error if saving the deduplication map fails (when `create_dedup_map` is `true`).
+///
+/// # Behavior
+///
+/// This function performs the following steps:
+/// 1. Collects all files from the first directory in the `directories` list.
+/// 2. Generates a hash map for deduplication using parallel processing:
+///    - Each file's hash is calculated.
+///    - Files with the same hash are grouped together.
+/// 3. Creates a tar archive:
+///    - For deduplicated files:
+///      - Writes the first instance of the file data.
+///      - Writes hard links for duplicates.
+///    - For non-duplicated files:
+///      - Writes the file as-is.
+/// 4. Optionally generates a deduplication map and saves it if `create_dedup_map` is `true`.
+/// 5. Outputs the original size, deduplicated size, and percentage of space saved.
+///
+/// # Notes
+///
+/// - The tar-writing process is performed sequentially and cannot be parallelized.
+/// - If `create_dedup_map` is `true` but the archive is written to stdout, the deduplication map
+///   is not created and a warning will be displayed.
+/// - Space savings are printed at the end, showing the original size, deduplicated size,
+///   and percentage saved.
+///
+/// # Logging
+///
+/// - Outputs progress and warnings to `stderr` for user visibility during execution.
 pub fn create_archive(
     archive: String,
     directories: Vec<String>,

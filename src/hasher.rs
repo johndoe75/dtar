@@ -3,6 +3,32 @@ use std::io::Read;
 use sha2::{Digest, Sha256};
 use crate::map::{FileInfo, FileMap};
 
+/// Calculates the SHA-256 hash of a file and updates the `FileInfo` object with the computed hash.
+///
+/// This function reads the content of the file specified in the `FileInfo` object in 1 MB chunks,
+/// computes the SHA-256 hash incrementally, and sets the resulting hash value in the cloned
+/// `FileInfo` object. The updated `FileInfo` object is then returned.
+///
+/// # Parameters
+/// - `file_info`: A reference to a `FileInfo` object containing the path of the file for which the
+///   hash needs to be calculated.
+///
+/// # Returns
+/// - `Ok(FileInfo)`: A `FileInfo` object cloned from the input and updated with the computed hash
+///   value.
+/// - `Err(crate::Error)`: If there is an error opening the file, reading from it, or encountering
+///   any other I/O-related issue.
+///
+/// # Errors
+/// This function returns an error in the following scenarios:
+/// - If the file specified in `file_info.path_as_string()` cannot be opened.
+/// - If there is an error while reading the file content.
+///
+/// # Notes
+/// - This function uses a fixed buffer size of 1 MB (`1024 * 1024`) to read the file in chunks.
+/// - The `FileInfo` must implement the `set_hash` method to store the calculated hash.
+/// - The function relies on the `sha2` crate for SHA-256 hashing and the `FileInfo` type to
+/// manage file metadata.
 pub fn calc_file_hash(file_info: &FileInfo) -> crate::Result<FileInfo> {
     let mut file = File::open(&file_info.path_as_string())?;
     let mut hasher = Sha256::new();
@@ -22,7 +48,6 @@ pub fn calc_file_hash(file_info: &FileInfo) -> crate::Result<FileInfo> {
     Ok(file_info_with_hash)
 }
 
-/// ```rust
 /// Inserts a file into the provided file map (`FileMap`) using a generated key.
 ///
 /// # Description
@@ -42,46 +67,10 @@ pub fn calc_file_hash(file_info: &FileInfo) -> crate::Result<FileInfo> {
 ///
 /// # Returns
 /// Updated `FileMap` with the new file and associated key.
-///
-/// # Example
-/// ```
-/// use std::collections::HashMap;
-///
-/// type FileMap = HashMap<String, Vec<FileInfo>>;
-///
-/// struct FileInfo {
-///     path: String,
-///     is_empty: bool,
-/// }
-///
-/// impl FileInfo {
-///     fn path_as_string(&self) -> String {
-///         self.path.clone()
-///     }
-///
-///     fn is_empty(&self) -> bool {
-///         self.is_empty
-///     }
-///
-///     fn hash_to_hex(&self) -> String {
-///         // Generate some hash and convert to hex in the real implementation.
-///         "abc123".to_string()
-///     }
-/// }
-///
-/// let mut file_map: FileMap = HashMap::new();
-/// let file = FileInfo {
-///     path: String::from("example.txt"),
-///     is_empty: false,
-/// };
-///
-/// file_map = insert_into_file_map(file_map, file);
-/// ```
-///
+/// 
 /// # Note
 /// * This function assumes that the `FileMap` is a `HashMap` where keys are strings, and values are vectors
 ///   of `FileInfo`.
-/// ```
 pub fn insert_into_file_map(mut acc: FileMap, file: FileInfo) -> FileMap {
     let key = if file.is_empty() {
         format!("empty: {}", file.path_as_string())
