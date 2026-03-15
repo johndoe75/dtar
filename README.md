@@ -3,6 +3,9 @@
 A tar-compatible archiver that automatically deduplicates identical files
 using hardlinks.
 
+***This project is under development. It might be buggy, break things or fail. Use
+at your own discretion.***
+
 ## Motivation
 
 While excellent backup and archiving solutions like borg and zpaq exist, which
