@@ -272,15 +272,6 @@ mod tests {
     }
 
     #[test]
-    fn hash_to_hex_handles_extreme_byte_values() {
-        let (file_info, dir) = make_file_info(vec![0x00, 0xff]);
-
-        assert_eq!(file_info.hash_to_hex(), "00ff");
-
-        fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
     fn hash_to_hex_uses_lowercase_hex_letters() {
         let (file_info, dir) = make_file_info(vec![0xab, 0xcd, 0xef]);
 

@@ -65,7 +65,7 @@ pub fn create_archive(
     archive: String,
     directories: Vec<String>,
     create_dedup_map: bool,
-    _verbose: bool,
+    verbose: bool,
 ) -> Result<()> {
     let dir = directories
         .first()
@@ -105,8 +105,11 @@ pub fn create_archive(
         // Duplicates -- write the first file as a file, create hard links for the rest
         if files.len() > 1 {
             let primary = &files[0];
-            eprintln!("a {}", files[0].sanitize_path());
-            builder.append_path_with_name(&primary.path_as_string(), &primary.sanitize_path())?;
+            let sanitized_path = primary.sanitize_path();
+            if verbose {
+                eprintln!("a {}", sanitized_path);
+            }
+            builder.append_path_with_name(&primary.path_as_string(), &sanitized_path)?;
             archive_data.add_file(&primary);
 
             if create_dedup_map {
@@ -114,7 +117,11 @@ pub fn create_archive(
             }
 
             for dup in &files[1..] {
-                eprintln!("h {}", dup.sanitize_path());
+                let dup_sanitized_path = dup.sanitize_path();
+
+                if verbose {
+                    eprintln!("h {}", dup_sanitized_path);
+                }
 
                 let mut header = Header::new_gnu();
                 header.set_uid(<u64>::from(dup.dir_entry.metadata()?.uid()));
@@ -124,7 +131,7 @@ pub fn create_archive(
 
                 builder.append_link(
                     &mut header,
-                    &dup.sanitize_path(),
+                    &dup_sanitized_path,
                     &primary.path_as_string(),
                 )?;
                 archive_data.add_dup(&dup);
@@ -134,8 +141,13 @@ pub fn create_archive(
                 }
             }
         } else {
-            eprintln!("a {}", files[0].sanitize_path());
-            builder.append_path_with_name(&files[0].path_as_string(), &files[0].sanitize_path())?;
+            let sanitized_path = files[0].sanitize_path();
+
+            if verbose {
+                eprintln!("a {}", sanitized_path);
+            }
+
+            builder.append_path_with_name(&files[0].path_as_string(), &sanitized_path)?;
             archive_data.add_file(&files[0]);
         }
     }
