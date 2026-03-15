@@ -67,12 +67,12 @@ pub fn create_archive(
     create_dedup_map: bool,
     verbose: bool,
 ) -> Result<()> {
-    let dir = directories
-        .first()
-        .ok_or_else(|| DtarError::NoDirectories)?;
+    let mut all_files: Vec<FileInfo> = vec![];
 
-    eprintln!("Collecting files from {}", dir);
-    let all_files = walker::collect_files(dir)?;
+    for dir in directories {
+        eprintln!("Collecting files from {}", dir);
+        all_files.extend(walker::collect_files(&dir)?);
+    }
 
     // Parallelize the hash map generation:
     // - map: calculate the hash for each file
