@@ -15,14 +15,23 @@ pub struct Args {
 pub enum Commands {
     /// Create a new archive.  Required is the archive name and at least one directory or file.
     Create {
-        #[arg(short, long, default_value = "false", help = "Create a deduplication map")]
+        #[arg(
+            short,
+            long,
+            default_value = "false",
+            help = "Create a deduplication map"
+        )]
         create_dedup_map: bool,
 
         #[arg(short, long, default_value = "false", help = "Increase verbosity")]
         verbose: bool,
 
-        #[arg(short, long, default_value = "false",
-            help = "Per default, symlinks are not followed and archived\nas symlinks. If this flag is set, symlinks are\nfollowed and archived as files.")]
+        #[arg(
+            short,
+            long,
+            default_value = "false",
+            help = "Per default, symlinks are not followed and archived\nas symlinks. If this flag is set, symlinks are\nfollowed and archived as files."
+        )]
         follow_symlinks: bool,
 
         #[clap(num_args = 1, required = true)]

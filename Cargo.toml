@@ -1,21 +1,16 @@
 [package]
 name = "dtar"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
-#chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.39", features = ["derive"] }
-#flate2 = "1.1.2"
-#indicatif = { version = "0.17.11", features = ["rayon", "tokio"] }
-rayon = "1.10.0"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+anyhow = "1.0.102"
+clap = { version = "4.6.0", features = ["derive"] }
+rayon = "1.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 sha2 = "0.10.9"
-size = "0.5.0"
 tar = "0.4.44"
-#tempfile = "3.20.0"
-thiserror = "2.0.12"
-#tokio = { version = "1.45.1", features = ["full"] }
+size = "0.5.0"
+thiserror = "2.0.18"
 walkdir = "2.5.0"

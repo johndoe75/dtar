@@ -1,7 +1,7 @@
+use crate::map::{FileInfo, FileMap};
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
-use sha2::{Digest, Sha256};
-use crate::map::{FileInfo, FileMap};
 
 /// Calculates the SHA-256 hash of a file and updates the `FileInfo` object with the computed hash.
 ///
@@ -67,7 +67,7 @@ pub fn calc_file_hash(file_info: &FileInfo) -> crate::Result<FileInfo> {
 ///
 /// # Returns
 /// Updated `FileMap` with the new file and associated key.
-/// 
+///
 /// # Note
 /// * This function assumes that the `FileMap` is a `HashMap` where keys are strings, and values are vectors
 ///   of `FileInfo`.

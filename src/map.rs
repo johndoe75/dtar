@@ -198,7 +198,6 @@ impl Archive {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::FileInfo;

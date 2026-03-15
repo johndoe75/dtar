@@ -113,10 +113,7 @@ pub fn create_archive(
             }
             builder.append_path_with_name(&primary.path_as_string(), &sanitized_path)?;
             archive_data.add_file(&primary);
-
-            if create_dedup_map {
-                dedup_map.add_file(&hash, PathBuf::from(&files[0].path_as_string()));
-            }
+            dedup_map.add_file(&hash, PathBuf::from(&files[0].path_as_string()));
 
             for dup in &files[1..] {
                 let dup_sanitized_path = dup.sanitize_path();
@@ -133,10 +130,7 @@ pub fn create_archive(
 
                 builder.append_link(&mut header, &dup_sanitized_path, &primary.path_as_string())?;
                 archive_data.add_dup(&dup);
-
-                if create_dedup_map {
-                    dedup_map.add_file(&hash, PathBuf::from(&dup.path_as_string()));
-                }
+                dedup_map.add_file(&hash, PathBuf::from(&dup.path_as_string()));
             }
         } else {
             let sanitized_path = files[0].sanitize_path();
@@ -150,15 +144,18 @@ pub fn create_archive(
         }
     }
 
+    // In every case, we add the deduplication map to the archive to keep it as portable as possible.
+    let default_name = "archive.ddm";
+    let dedup_map_filename =
+        generate_dedup_map_path(&archive).unwrap_or_else(|| String::from(default_name));
+    dedup_map.save(&dedup_map_filename)?;
+    builder.append_path_with_name(&dedup_map_filename, default_name)?;
     builder.finish()?;
 
-    if create_dedup_map {
-        if let Some(dedup_map_path) = generate_dedup_map_path(&archive) {
-            dedup_map.save(&dedup_map_path)?;
-            eprintln!("Deduplication map saved to: {}", dedup_map_path);
-        } else {
-            eprintln!("Warning: Cannot create deduplication map when writing to stdout");
-        }
+    // If we shall not create the deduplication map, we remove it from the drive after the archive
+    // was created
+    if !create_dedup_map {
+        std::fs::remove_file(dedup_map_filename)?;
     }
 
     eprintln!(
@@ -194,9 +191,8 @@ fn generate_dedup_map_path(archive: &str) -> Option<String> {
         return None;
     }
 
-    if archive.ends_with(".tar") {
-        Some(archive.replace(".tar", ".ddm"))
-    } else {
-        Some(format!("{}.ddm", archive))
+    match archive.ends_with(".tar") {
+        true => Some(archive.replace(".tar", ".ddm")),
+        false => Some(format!("{}.ddm", archive)),
     }
 }
