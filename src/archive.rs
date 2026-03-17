@@ -10,6 +10,8 @@ use std::io;
 use std::io::{Read, Seek, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use sha2::digest::Update;
+use sha2::{Digest, Sha256};
 use tar::{Builder, EntryType, Header};
 
 const ARCHIVE_FILE_EXTENSION: &str = "ddm";
@@ -172,7 +174,7 @@ pub fn create_archive(
     Ok(())
 }
 
-pub fn extract_archive(extract_to: String, archive: String, verbose: bool) -> Result<()> {
+pub fn extract_archive(extract_to: String, archive: String, _verbose: bool) -> Result<()> {
     let file = File::open(archive)?;
     let mut tar = tar::Archive::new(file);
 
@@ -187,17 +189,82 @@ pub fn extract_archive(extract_to: String, archive: String, verbose: bool) -> Re
 }
 
 pub fn verify_archive(archive: String) -> Result<()> {
-    let file = File::open(archive)?;
-    let mut tar = tar::Archive::new(file);
-    let file = tar.into_inner();
+    let mut file = File::open(&archive)?;
+    let map_name = format!("{}.{}", ARCHIVE_FILE_NAME, ARCHIVE_FILE_EXTENSION);
+    let dedup_map = read_dedup_map_from_archive_end(map_name, &mut file)
+        .with_context(|| format!("failed to read dedup map from archive '{}'", archive))?;
 
+    file.rewind()?;
+    let mut tar = tar::Archive::new(file);
+
+    for entry_result in tar.entries()? {
+        let mut entry = entry_result?;
+        let header = entry.header();
+        let path = entry.path()?.into_owned();
+
+        if path == Path::new(map_name.as_str()) {
+            continue;
+        }
+
+        match header.entry_type() {
+            EntryType::Regular => {
+                let hash = sha256_reader(&mut entry)?;
+                let expected_original = dedup_map.get_originals(&hash);
+                let expected_duplicates = dedup_map.get_duplicates(&hash);
+
+                let path_matches = expected_original == Some(&path)
+                    || expected_duplicates
+                        .map(|dups| dups.iter().any(|dup| dup == &path))
+                        .unwrap_or(false);
+
+                if !path_matches {
+                    bail!(
+                        "file '{}' has hash '{}' but is not present in the dedup map",
+                        path.display(),
+                        hash
+                    );
+                }
+            }
+            EntryType::Link => {
+                let link_name = entry
+                    .link_name()?
+                    .ok_or_else(|| anyhow!("hard link '{}' has no target", path.display()))?
+                    .into_owned();
+
+                let mut found = false;
+
+                for (hash, original) in dedup_map.iter_originals() {
+                    if original == &link_name {
+                        let duplicates = dedup_map.get_duplicates(hash).ok_or_else(|| {
+                            anyhow!("hash '{}' missing duplicates entry in dedup map", hash)
+                        })?;
+
+                        if duplicates.iter().any(|dup| dup == &path) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !found {
+                    bail!(
+                        "hard link '{}' -> '{}' is not described by the dedup map",
+                        path.display(),
+                        link_name.display()
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    eprintln!("Archive verification successful: all hashes match the dedup map");
     Ok(())
 }
 
-fn read_dedup_map_from_archive_end(file: &mut File) -> Result<DedupMap> {
+fn read_dedup_map_from_archive_end(map_name: String, file: &mut File) -> Result<DedupMap> {
     file.rewind()?;
     let mut tar = tar::Archive::new(file);
-    let map_name = format!("{}.{}", ARCHIVE_FILE_NAME, ARCHIVE_FILE_EXTENSION);
 
     let mut last_path: Option<PathBuf> = None;
     let mut last_conents: Option<Vec<u8>> = None;
@@ -224,6 +291,21 @@ fn read_dedup_map_from_archive_end(file: &mut File) -> Result<DedupMap> {
         serde_json::from_slice(&contents).context("Failed to parse dedup map")?;
 
     Ok(dedup_map)
+}
+
+fn sha256_reader<R: Read>(reader: &mut R) -> Result<String> {
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 1024 * 1024];
+
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 /// If the archive path is "-", we write the archive to stdout -- like the GNU tar would.
