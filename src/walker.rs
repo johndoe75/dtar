@@ -1,5 +1,5 @@
-use crate::Result;
 use crate::map::FileInfo;
+use crate::Result;
 use walkdir::WalkDir;
 
 pub fn collect_files(dir: &str) -> Result<Vec<FileInfo>> {

@@ -21,7 +21,6 @@ pub fn calc_file_hash(file: &mut File) -> crate::Result<Vec<u8>> {
     Ok(hasher.finalize().to_vec())
 }
 
-
 pub fn insert_into_file_map(mut acc: FileMap, file: FileInfo) -> FileMap {
     let key = if file.is_empty() {
         format!("empty: {}", file.path_as_string())

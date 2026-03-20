@@ -1,11 +1,11 @@
+use crate::hasher::calc_file_hash;
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use walkdir::DirEntry;
-use crate::hasher::calc_file_hash;
-use crate::Result;
 
 pub type FileMap = HashMap<String, Vec<FileInfo>>;
 
@@ -56,7 +56,7 @@ impl FileInfo {
 
         self.hash = hash;
         Ok(self)
-   }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

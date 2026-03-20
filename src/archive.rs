@@ -1,11 +1,10 @@
-use crate::Result;
 use crate::hasher::calc_file_hash;
 use crate::map::{Archive, DedupMap, FileInfo, FileMap};
+use crate::Result;
 use crate::{hasher, walker};
-use anyhow::{Context, anyhow, bail};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use sha2::digest::Update;
-use sha2::{Digest, Sha256};
+use anyhow::{anyhow, bail, Context};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use sha2::Digest;
 use size::Size;
 use std::collections::HashMap;
 use std::fs::File;
