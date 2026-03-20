@@ -1,8 +1,8 @@
+use crate::Result;
 use crate::hasher::calc_file_hash;
 use crate::map::{Archive, DedupMap, FileInfo, FileMap};
-use crate::Result;
 use crate::{hasher, walker};
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use size::Size;
 use std::collections::HashMap;

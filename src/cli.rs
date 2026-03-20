@@ -43,7 +43,12 @@ pub enum Commands {
 
     /// Extract an archive.
     Extract {
-        #[arg(short, long, default_value = ".", help = "Extract to a specific directory")]
+        #[arg(
+            short,
+            long,
+            default_value = ".",
+            help = "Extract to a specific directory"
+        )]
         extract_to: String,
 
         #[arg(short, long, default_value = "false", help = "Increase verbosity")]
@@ -51,5 +56,5 @@ pub enum Commands {
 
         #[clap(num_args = 1, required = true)]
         archive: String,
-    }
+    },
 }

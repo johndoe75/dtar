@@ -1,5 +1,5 @@
-use crate::hasher::calc_file_hash;
 use crate::Result;
+use crate::hasher::calc_file_hash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -53,7 +53,6 @@ impl FileInfo {
     pub fn with_calculated_hash(mut self) -> Result<Self> {
         let mut file = File::open(self.dir_entry.path())?;
         let hash = calc_file_hash(&mut file)?;
-
         self.hash = hash;
         Ok(self)
     }
