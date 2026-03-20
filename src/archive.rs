@@ -4,7 +4,6 @@ use crate::Result;
 use crate::{hasher, walker};
 use anyhow::{anyhow, bail, Context};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use sha2::Digest;
 use size::Size;
 use std::collections::HashMap;
 use std::fs::File;
@@ -80,8 +79,9 @@ pub fn create_archive(
                 }
 
                 let mut header = Header::new_gnu();
-                header.set_uid(<u64>::from(dup.dir_entry.metadata()?.uid()));
-                header.set_gid(<u64>::from(dup.dir_entry.metadata()?.gid()));
+                let metadata = dup.dir_entry.metadata()?;
+                header.set_uid(<u64>::from(metadata.uid()));
+                header.set_gid(<u64>::from(metadata.gid()));
                 header.set_entry_type(EntryType::Link);
                 header.set_size(0);
 

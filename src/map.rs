@@ -131,6 +131,9 @@ impl Archive {
     }
 
     pub fn get_dedup_ratio(&self) -> f64 {
+        if self.orig_size == 0 {
+            return 0.0;
+        }
         self.dedup_size as f64 / self.orig_size as f64
     }
 }
