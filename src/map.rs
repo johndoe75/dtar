@@ -4,6 +4,8 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use walkdir::DirEntry;
+use crate::hasher::calc_file_hash;
+use crate::Result;
 
 pub type FileMap = HashMap<String, Vec<FileInfo>>;
 
@@ -33,7 +35,7 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub fn new(direntry: DirEntry) -> Result<Self, std::io::Error> {
+    pub fn new(direntry: DirEntry) -> Result<Self> {
         let size = direntry.metadata()?.len();
         Ok(Self {
             dir_entry: direntry,
@@ -43,15 +45,9 @@ impl FileInfo {
     }
 
     /// Sets the hash for the current object.
-    ///
-    /// # Parameters
-    /// - `hash` (Vec<u8>): A vector of bytes representing the hash to be set.
-    ///
-    /// # Behavior
-    /// This method updates the `hash` field of the object with the provided vector of bytes.
-    /// Any existing value in the `hash` field will be replaced with the new value.
-    pub fn set_hash(&mut self, hash: Vec<u8>) {
+    pub fn set_hash(mut self, hash: Vec<u8>) -> Result<Self> {
         self.hash = hash;
+        Ok(self)
     }
 
     /// Converts the `hash` field (a collection of bytes) into a hexadecimal
@@ -101,6 +97,15 @@ impl FileInfo {
     pub fn is_empty(&self) -> bool {
         self.size == 0
     }
+
+    /// Calculate the sha256 hash for the file
+    pub fn with_calculated_hash(mut self) -> Result<Self> {
+        let mut file = File::open(self.dir_entry.path())?;
+        let hash = calc_file_hash(&mut file)?;
+
+        self.hash = hash;
+        Ok(self)
+   }
 }
 
 /// The `DedupMap` struct is designed to maintain a mapping of file metadata, particularly

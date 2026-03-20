@@ -1,8 +1,11 @@
-use crate::map::{Archive, DedupMap, FileInfo, FileMap};
 use crate::Result;
+use crate::hasher::calc_file_hash;
+use crate::map::{Archive, DedupMap, FileInfo, FileMap};
 use crate::{hasher, walker};
-use anyhow::{anyhow, bail, Context};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use anyhow::{Context, anyhow, bail};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use sha2::digest::Update;
+use sha2::{Digest, Sha256};
 use size::Size;
 use std::collections::HashMap;
 use std::fs::File;
@@ -10,8 +13,6 @@ use std::io;
 use std::io::{Read, Seek, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use sha2::digest::Update;
-use sha2::{Digest, Sha256};
 use tar::{Builder, EntryType, Header};
 
 const ARCHIVE_FILE_EXTENSION: &str = "ddm";
@@ -85,8 +86,8 @@ pub fn create_archive(
     // - reduce: combines all thread-local hash maps into one final map
     eprintln!("Generating hashes for deduplication");
     let map = all_files
-        .par_iter()
-        .map(hasher::calc_file_hash)
+        .into_par_iter()
+        .map(FileInfo::with_calculated_hash)
         .flatten()
         .fold(HashMap::new, |acc: FileMap, file: FileInfo| {
             hasher::insert_into_file_map(acc, file)
@@ -208,7 +209,16 @@ pub fn verify_archive(archive: String) -> Result<()> {
 
         match header.entry_type() {
             EntryType::Regular => {
-                let hash = sha256_reader(&mut entry)?;
+                let file_info = FileInfo::new(entry);
+
+                let mut file = File::open(&entry.path()?)?;
+                let hash = calc_file_hash(&mut file)?;
+
+                let hash = match calc_file_hash(&mut entry) {
+                    Ok(hash) => hash.to_string(),
+                    Err(_) => continue,
+                };
+                // let hash = sha256_reader(&mut entry)?;
                 let expected_original = dedup_map.get_originals(&hash);
                 let expected_duplicates = dedup_map.get_duplicates(&hash);
 
@@ -293,31 +303,15 @@ fn read_dedup_map_from_archive_end(map_name: String, file: &mut File) -> Result<
     Ok(dedup_map)
 }
 
-fn sha256_reader<R: Read>(reader: &mut R) -> Result<String> {
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
-
-    loop {
-        let bytes_read = reader.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
 /// If the archive path is "-", we write the archive to stdout -- like the GNU tar would.
 /// This allows the user to further handle the tar before it hits the drive.  Something like
 /// compressing the archive like this:
 ///
 /// dtar - {directory} | gzip > output.tgz
 fn create_tar_writer(path: &str) -> Result<Box<dyn Write>> {
-    if path == "-" {
-        Ok(Box::new(io::stdout()))
-    } else {
-        Ok(Box::new(File::create(path)?))
+    match path {
+        "-" => Ok(Box::new(io::stdout())),
+        _ => Ok(Box::new(File::create(path)?)),
     }
 }
 

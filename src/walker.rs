@@ -1,5 +1,5 @@
-use crate::map::FileInfo;
 use crate::Result;
+use crate::map::FileInfo;
 use walkdir::WalkDir;
 
 /// Collects information about all files within a specified directory.

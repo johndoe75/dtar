@@ -1,4 +1,5 @@
 use crate::map::{FileInfo, FileMap};
+use sha2::digest::Update;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
@@ -29,10 +30,9 @@ use std::io::Read;
 /// - The `FileInfo` must implement the `set_hash` method to store the calculated hash.
 /// - The function relies on the `sha2` crate for SHA-256 hashing and the `FileInfo` type to
 /// manage file metadata.
-pub fn calc_file_hash(file_info: &FileInfo) -> crate::Result<FileInfo> {
-    let mut file = File::open(&file_info.path_as_string())?;
-    let mut hasher = Sha256::new();
+pub fn calc_file_hash(file: &mut File) -> crate::Result<Vec<u8>> {
     const BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
+    let mut hasher = Sha256::new();
     let mut buffer = [0; BUFFER_SIZE];
 
     loop {
@@ -40,12 +40,11 @@ pub fn calc_file_hash(file_info: &FileInfo) -> crate::Result<FileInfo> {
         if bytes_read == 0 {
             break;
         }
-        hasher.update(&buffer[..bytes_read]);
+
+        Update::update(&mut hasher, &buffer[..bytes_read]);
     }
 
-    let mut file_info_with_hash = file_info.clone();
-    file_info_with_hash.set_hash(hasher.finalize().to_vec());
-    Ok(file_info_with_hash)
+    Ok(hasher.finalize().to_vec())
 }
 
 /// Inserts a file into the provided file map (`FileMap`) using a generated key.
