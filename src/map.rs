@@ -9,23 +9,6 @@ use crate::Result;
 
 pub type FileMap = HashMap<String, Vec<FileInfo>>;
 
-/// Represents information about a file, including its metadata and hash.
-///
-/// # Fields
-///
-/// * `dir_entry` - The directory entry (`DirEntry`) associated with the file.
-///   It provides access to the file's path and metadata as retrieved from the filesystem.
-///
-/// * `hash` - A vector of bytes (`Vec<u8>`) representing the computed hash of the file's
-///   contents. This can be used for file integrity checks or comparisons.
-///
-/// * `size` - The size of the file in bytes, represented as a `u64`.
-///   This provides information about the file's physical size on disk.
-///
-/// # Traits
-///
-/// * `Debug` - Enables formatting the `FileInfo` object using the `{:?}` formatter for debugging purposes.
-/// * `Clone` - Allows cloning the `FileInfo` object to create deep copies.
 #[derive(Debug, Clone)]
 pub struct FileInfo {
     pub dir_entry: DirEntry,
@@ -50,50 +33,18 @@ impl FileInfo {
         Ok(self)
     }
 
-    /// Converts the `hash` field (a collection of bytes) into a hexadecimal
-    /// string representation.
-    ///
-    /// Each byte in the `hash` is transformed into a two-character lowercase
-    /// hexadecimal value, and the resulting sequence of hex values is concatenated
-    /// into a single `String`.
-    ///
-    /// # Returns
-    ///
-    /// A `String` containing the hexadecimal representation of the `hash`.
     pub fn hash_to_hex(&self) -> String {
         self.hash.iter().map(|b| format!("{:02x}", b)).collect()
     }
 
-    /// Converts the path of the directory entry into a `String`.
-    ///
-    /// # Returns
-    /// A `String` representation of the `Path` associated with the `dir_entry`.
-    ///
-    /// # Panics
-    /// This function will panic if the path cannot be converted to a valid UTF-8 string.
-    /// Ensure that the path is valid UTF-8 to avoid runtime errors.
     pub fn path_as_string(&self) -> String {
         self.dir_entry.path().to_str().unwrap().to_string()
     }
 
-    /// Removes leading slashes from the path string representation.
-    ///
-    /// This method retrieves the path as a `String` using `path_as_string()`,
-    /// then removes any leading slashes (`'/'`) using `trim_start_matches`,
-    /// and finally converts the result back into a `String`.
-    ///
-    /// # Returns
-    ///
-    /// A `String` containing the sanitized path with leading slashes removed.
     pub fn sanitize_path(&self) -> String {
         self.path_as_string().trim_start_matches('/').to_string()
     }
 
-    /// Checks if the current instance is empty.
-    ///
-    /// # Returns
-    /// * `true` - If the size of the instance is 0.
-    /// * `false` - If the size of the instance is greater than 0.
     pub fn is_empty(&self) -> bool {
         self.size == 0
     }
@@ -108,25 +59,6 @@ impl FileInfo {
    }
 }
 
-/// The `DedupMap` struct is designed to maintain a mapping of file metadata, particularly
-/// for use cases involving duplicate file tracking or file organization.
-///
-/// # Fields
-///
-/// * `files` - A `HashMap` where:
-///     - The key is a `String` representing the unique identifier for a file (e.g., hash or name).
-///     - The value is a tuple containing:
-///         - A `PathBuf` which points to the primary file location.
-///         - A `Vec<PathBuf>` representing a list of other locations where the same file exists (duplicates).
-///
-/// # Derives
-///
-/// This struct derives the following traits:
-///
-/// * `Debug` - Enables the use of the `{:?}` formatter for debugging purposes.
-/// * `Default` - Provides a default implementation for creating an empty `DedupMap`.
-/// * `Serialize` - Allows serialization of the `DedupMap` using compatible formats (e.g., JSON, YAML).
-/// * `Deserialize` - Allows deserialization into a `DedupMap` from compatible formats (e.g., JSON, YAML).
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct DedupMap {
     files: HashMap<String, (PathBuf, Vec<PathBuf>)>,
